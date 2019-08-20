@@ -1,0 +1,77 @@
+---
+title: "hiearchical forecasting example"
+author: "Bryan Shalloway"
+date: "8/20/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(broom)
+library(fpp2)
+library(prophet)
+```
+
+*Prep data used in examples:*
+```{r}
+prison_df <- fpp2::prisonLF %>% 
+  group_by(state, legal, t) %>% 
+  summarise(count = sum(count)) %>% 
+  ungroup() %>% 
+  rename(state_aus = state, date_mo = t) %>% 
+  select(state_aus, date_mo, legal, count) %>% 
+  arrange(date_mo) %>% 
+  spread(legal, count)
+```
+
+Functions to simplify code
+```{r}
+select_preds <- function(df){
+  select(df, ds, yhat_lower, yhat_upper, yhat) %>% 
+    as_tibble() %>% 
+    mutate(ds = lubridate::as_date(ds),
+           training = row_number() > (nrow(df) - 12))
+}
+
+build_join_preds <- function(models, data){
+  make_future_dataframe(models, periods = 12, freq = "quarter") %>% 
+    predict(models, .) %>% 
+    select_preds() %>% 
+    left_join(data, ., by = "ds")
+}
+
+```
+
+*Build individual forecasts:*
+```{r}
+prison_models <- prison_df %>% 
+  select(state_aus, ds = date_mo, y = Sentenced) %>% 
+  group_by(state_aus) %>% 
+  nest() %>%
+  mutate(split = map(.x = data, .f = rsample::initial_time_split),
+         train = map(.x = split, .f = rsample::analysis),
+         test = map(.x = split, .f = rsample::assessment),
+         models = map(.x = train, .f = fit.prophet, m = prophet()),
+         preds = map2(.x = models, .y = data, .f = build_join_preds))
+
+```
+
+*Bottom-up aggregation:*
+```{r}
+prison_models %>% 
+  unnest(preds) %>% 
+  group_by(ds) %>% 
+  summarise(total_sentenced = sum(y)) %>% 
+  arrange(desc(ds))
+
+
+
+```
+
