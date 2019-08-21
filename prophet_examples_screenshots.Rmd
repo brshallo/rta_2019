@@ -28,7 +28,8 @@ prison_df <- fpp2::prisonLF %>%
   rename(state_aus = state, date_mo = t) %>% 
   select(state_aus, date_mo, legal, count) %>% 
   arrange(date_mo) %>% 
-  spread(legal, count)
+  spread(legal, count) %>% 
+  print()
 ```
 
 Functions to simplify code
@@ -59,7 +60,8 @@ prison_models <- prison_df %>%
          train = map(.x = split, .f = rsample::analysis),
          test = map(.x = split, .f = rsample::assessment),
          models = map(.x = train, .f = fit.prophet, m = prophet()),
-         preds = map2(.x = models, .y = data, .f = build_join_preds))
+         preds = map2(.x = models, .y = data, .f = build_join_preds)) %>% 
+  prison()
 
 ```
 
@@ -70,8 +72,5 @@ prison_models %>%
   group_by(ds) %>% 
   summarise(total_sentenced = sum(y)) %>% 
   arrange(desc(ds))
-
-
-
 ```
 
